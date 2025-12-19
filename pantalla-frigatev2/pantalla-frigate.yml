@@ -1,13 +1,10 @@
 ﻿esphome:
-  name: pantalla-ink-salon
-  friendly_name: Pantalla ink salon
-  #on_boot:
-   # priority: 600.0
-   # then:
-   #   - output.turn_on: power_sensors
-   #   - delay: 300ms
-   #   - component.update: main_display
-    #  - script.execute: go_to_sleep_delayed
+  name: pantalla-rack-1
+  friendly_name: pantalla-rack-1
+  on_boot:
+    priority: -10
+    then:
+      - script.execute: refresh_loop
 
 esp32: 
   board: seeed_xiao_esp32c3
@@ -19,6 +16,7 @@ web_server:
   port: 80
 
 logger:
+  level: ERROR
 
 api:
   encryption:
@@ -37,13 +35,6 @@ captive_portal:
 
 ota:
   platform: esphome
-
-#i2c:
-#  sda: GPIO8
-#  scl: GPIO9
-#  scan: true
-#  id: bus_a
-  #frequency: 50000Hz
 
 spi:
   clk_pin: GPIO7
@@ -73,7 +64,7 @@ font:
     id: fuente_14
     size: 14
 sensor:
-  # CPU
+  # CPU frigate proxmox
   - platform: homeassistant
     entity_id: sensor.lxc_frigate_proxmox_200_cpu_used
     id: cpu_usage
@@ -100,21 +91,6 @@ sensor:
   - platform: homeassistant
     entity_id: sensor.lxc_frigate_400_memory_used_percentage
     id: ram_percent2
-  # DISK
-  - platform: homeassistant
-    entity_id: sensor.node_proxmox_disk_total
-    id: disk_total
-  - platform: homeassistant
-    entity_id: sensor.node_proxmox_disk_used
-    id: disk_used
-  - platform: homeassistant
-    entity_id: sensor.node_proxmox_disk_used_percentage
-    id: disk_percent
-
-  # Temperatura SSD
-  - platform: homeassistant
-    entity_id: sensor.disk_proxmox_512gb_ssd_temperature
-    id: disk_temp
 
   #Temperaturas
   - platform: homeassistant
@@ -131,8 +107,6 @@ sensor:
   - platform: homeassistant
     entity_id: sensor.temperatura_calle_solar_madrid_humidity
     id: humedad_exterior
-
-    
   
 
 text_sensor:
@@ -144,16 +118,7 @@ text_sensor:
   - platform: homeassistant
     entity_id: sensor.frigate_status
     id: frigateM_status
-
-  - platform: homeassistant
-    entity_id: sensor.node_proxmox_status
-    id: proxmox_status
-  - platform: homeassistant
-    entity_id: sensor.node_proxmox2_status
-    id: proxmox2_status
-  - platform: homeassistant
-    entity_id: sensor.node_proxmox4_status
-    id: proxmox4_status
+    #Vm status
   - platform: homeassistant
     entity_id: sensor.qemu_debian960_151_status
     id: debian1_status
@@ -164,21 +129,45 @@ text_sensor:
 
 display:
   - platform: waveshare_epaper
-    #model: 2.90inv2-r2
     model: wa2.90in3c
     cs_pin: GPIO5
     dc_pin: GPIO2
     reset_pin: GPIO1
     busy_pin: GPIO0
     rotation: 90
-    #para in3c
     reset_duration: 2ms
-    update_interval: 120s
-    #para r2
-    #full_update_every: 1440
+    update_interval: never
     auto_clear_enabled: true
     id: main_display
     lambda: |-
+      /*No pintar si no esta habilitado o gente en casa*/
+      if (!id(refresh_enabled).state || !id(gente_en_casa).state) {
+        return;
+      }
+      
+      // 2. Hora válida
+      auto now = id(esptime).now();
+      if (!now.is_valid()) {
+        return;
+      }
+
+      // 3. Ventana horaria
+      int current_hour = now.hour;
+      int start_h = (int) id(refresh_start_hour).state;
+      int end_h   = (int) id(refresh_end_hour).state;
+
+      bool horario_ok;
+
+      if (start_h < end_h) {
+        horario_ok = (current_hour >= start_h && current_hour < end_h);
+      } else {
+        horario_ok = (current_hour >= start_h || current_hour < end_h);
+      }
+
+      if (!horario_ok) {
+        return;
+      }
+
       // Limpiar pantalla
       it.fill(id(color_blanco));
 
@@ -264,7 +253,6 @@ display:
       int info_x = col_w * 2 + 8;
       
       //Hora
-      auto now = id(esptime).now();
       if (now.is_valid()) {
         char time_str[6];
         snprintf(time_str, sizeof(time_str), "%02d:%02d", now.hour, now.minute);
@@ -315,9 +303,9 @@ display:
 
 
       Estado states_enum[5] = {
-        estado_from_string(id(proxmox_status).state),
-        estado_from_string(id(proxmox2_status).state),
-        estado_from_string(id(proxmox4_status).state),
+        id(proxmox_status).state ? ESTADO_OK : ESTADO_KO,
+        id(proxmox2_status).state ? ESTADO_OK : ESTADO_KO,
+        id(proxmox4_status).state ? ESTADO_OK : ESTADO_KO,
         estado_from_string(id(debian1_status).state),
         estado_from_string(id(debian2_status).state)
       };
@@ -325,13 +313,20 @@ display:
 
       ESP_LOGD(
         "STATUS",
-        "P1='%s' | P2='%s' | P3='%s' | D1='%s' | D2='%s'",
-        id(proxmox_status).state.c_str(),
-        id(proxmox2_status).state.c_str(),
-        id(proxmox4_status).state.c_str(),
+        "P1=%d | P2=%d | P3=%d | D1='%s' | D2='%s'",
+        id(proxmox_status).state,
+        id(proxmox2_status).state,
+        id(proxmox4_status).state,
         id(debian1_status).state.c_str(),
         id(debian2_status).state.c_str()
       );
+      ESP_LOGD(
+        "STATUS",
+        "RAW proxmox2: state=%d",
+        id(proxmox2_status).state
+      );
+
+
       for (int i = 0; i < 5; i++) {
         int cx = step * i + step / 2;
 
@@ -350,10 +345,17 @@ display:
         }
       }
 
-interval:
-  - interval: 900s
-    then:
-      - switch.turn_on: update_display
+#interval:
+#  - interval: 900s
+#    then:
+#      - if:
+#          condition:
+#            and:
+#              - switch.is_on: refresh_enabled
+#              - binary_sensor.is_on: gente_en_casa
+#          then:
+#            - component.update: main_display
+
 
 time:
   - platform: sntp
@@ -382,6 +384,31 @@ switch:
       - component.update: main_display
       - switch.turn_off: update_display
 
+  - platform: template
+    name: "Pantalla refresco habilitado"
+    id: refresh_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+#Sensor HA
+binary_sensor:
+  - platform: homeassistant
+    entity_id: input_boolean.gente_en_casa_madrid
+    id: gente_en_casa
+
+  - platform: homeassistant
+    entity_id: binary_sensor.node_proxmox_status
+    id: proxmox_status
+
+  - platform: homeassistant
+    entity_id: binary_sensor.node_proxmox2_status
+    publish_initial_state: true
+    id: proxmox2_status
+
+  - platform: homeassistant
+    entity_id: binary_sensor.node_proxmox4_status
+    id: proxmox4_status
+
 number:
   - platform: template
     name: "Duración activa Pantalla"
@@ -409,10 +436,33 @@ number:
     name: "Intervalo de refresco pantalla"
     id: refresh_control
     min_value: 1
-    max_value: 600
-    step: 10
-    initial_value: 60
+    max_value: 120
+    initial_value: 10
+    step: 1
+    unit_of_measurement: min
+    restore_value: true
     optimistic: true
+
+
+  - platform: template
+    name: "Pantalla hora inicio"
+    id: refresh_start_hour
+    min_value: 0
+    max_value: 23
+    step: 1
+    initial_value: 8
+    optimistic: true
+    restore_value: true
+
+  - platform: template
+    name: "Pantalla hora fin"
+    id: refresh_end_hour
+    min_value: 0
+    max_value: 23
+    step: 1
+    initial_value: 22
+    optimistic: true
+    restore_value: true
 
 output:
   - platform: gpio
@@ -431,3 +481,19 @@ script:
       - deep_sleep.enter:
           id: deep_sleep_1
           sleep_duration: !lambda 'return (uint32_t) id(sleep_time).state * 1000;'
+  - id: refresh_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return true;'
+          then:
+            - if:
+                condition:
+                  and:
+                    - switch.is_on: refresh_enabled
+                    - binary_sensor.is_on: gente_en_casa
+                then:
+                  - component.update: main_display
+            - delay: !lambda |-
+                return (uint32_t)(id(refresh_control).state * 60 * 1000);
