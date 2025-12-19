@@ -1,0 +1,20 @@
+# --- ESPHome / PlatformIO ---
+.esphome/
+.pioenvs/
+.pio/
+
+# Carpetas generadas por PlatformIO
+lib/
+src/
+test/
+
+# Python / cache
+__pycache__/
+*.pyc
+
+# Secrets
+secrets.yaml
+
+# Archivos temporales
+*.log
+*.tmp
