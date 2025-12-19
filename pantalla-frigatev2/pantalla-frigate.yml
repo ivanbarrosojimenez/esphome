@@ -1,0 +1,433 @@
+﻿esphome:
+  name: pantalla-ink-salon
+  friendly_name: Pantalla ink salon
+  #on_boot:
+   # priority: 600.0
+   # then:
+   #   - output.turn_on: power_sensors
+   #   - delay: 300ms
+   #   - component.update: main_display
+    #  - script.execute: go_to_sleep_delayed
+
+esp32: 
+  board: seeed_xiao_esp32c3
+  variant: esp32c3
+  framework:
+    type: arduino
+
+web_server:
+  port: 80
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+  reboot_timeout: 0s
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  ap:
+    ssid: "pantalla-c3-fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+ota:
+  platform: esphome
+
+#i2c:
+#  sda: GPIO8
+#  scl: GPIO9
+#  scan: true
+#  id: bus_a
+  #frequency: 50000Hz
+
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO6
+
+globals:
+  - id: pantalla_activa
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+color:
+  - id: color_negro
+    hex: "FFFFFF"   # Invertido para e-paper
+  - id: color_blanco
+    hex: "000000"   # Invertido para e-paper
+  - id: color_rojo
+    hex: "FF0000"
+font:
+  - file: "../fonts/SpringEgg.ttf"
+    id: fuente_28
+    size: 28
+  - file: "../fonts/SpringEgg.ttf"
+    id: fuente_8
+    size: 8
+  - file: "../fonts/SpringEgg.ttf"
+    id: fuente_14
+    size: 14
+sensor:
+  # CPU
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_proxmox_200_cpu_used
+    id: cpu_usage
+  # RAM frigate proxmox
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_proxmox_200_memory_total
+    id: ram_total
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_proxmox_200_memory_used
+    id: ram_used
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_proxmox_200_memory_used_percentage
+    id: ram_percent
+  # CPU & RAM PROMXMOX2
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_400_cpu_used
+    id: cpu_usage2
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_400_memory_total
+    id: ram_total2
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_400_memory_used
+    id: ram_used2
+  - platform: homeassistant
+    entity_id: sensor.lxc_frigate_400_memory_used_percentage
+    id: ram_percent2
+  # DISK
+  - platform: homeassistant
+    entity_id: sensor.node_proxmox_disk_total
+    id: disk_total
+  - platform: homeassistant
+    entity_id: sensor.node_proxmox_disk_used
+    id: disk_used
+  - platform: homeassistant
+    entity_id: sensor.node_proxmox_disk_used_percentage
+    id: disk_percent
+
+  # Temperatura SSD
+  - platform: homeassistant
+    entity_id: sensor.disk_proxmox_512gb_ssd_temperature
+    id: disk_temp
+
+  #Temperaturas
+  - platform: homeassistant
+    entity_id: sensor.calidad_aire_madrid_temperature
+    id: temperatura_interior
+  - platform: homeassistant
+    entity_id: sensor.calidad_aire_madrid_humidity
+    id: humedad_interior
+
+
+  - platform: homeassistant
+    entity_id: sensor.temperatura_calle_solar_madrid_temperature
+    id: temperatura_exterior
+  - platform: homeassistant
+    entity_id: sensor.temperatura_calle_solar_madrid_humidity
+    id: humedad_exterior
+
+    
+  
+
+text_sensor:
+  # Frigate status
+  - platform: homeassistant
+    entity_id: sensor.frigate_status_2
+    id: frigateA_status
+  
+  - platform: homeassistant
+    entity_id: sensor.frigate_status
+    id: frigateM_status
+
+  - platform: homeassistant
+    entity_id: sensor.node_proxmox_status
+    id: proxmox_status
+  - platform: homeassistant
+    entity_id: sensor.node_proxmox2_status
+    id: proxmox2_status
+  - platform: homeassistant
+    entity_id: sensor.node_proxmox4_status
+    id: proxmox4_status
+  - platform: homeassistant
+    entity_id: sensor.qemu_debian960_151_status
+    id: debian1_status
+  - platform: homeassistant
+    entity_id: sensor.qemu_debianp2_123_status
+    id: debian2_status
+
+
+display:
+  - platform: waveshare_epaper
+    #model: 2.90inv2-r2
+    model: wa2.90in3c
+    cs_pin: GPIO5
+    dc_pin: GPIO2
+    reset_pin: GPIO1
+    busy_pin: GPIO0
+    rotation: 90
+    #para in3c
+    reset_duration: 2ms
+    update_interval: 120s
+    #para r2
+    #full_update_every: 1440
+    auto_clear_enabled: true
+    id: main_display
+    lambda: |-
+      // Limpiar pantalla
+      it.fill(id(color_blanco));
+
+      // Dimensiones de pantalla
+      int screen_w = 296;
+      int screen_h = 128;
+
+      // Altura del bloque inferior (estados)
+      int bottom_h = 15;
+
+      // Separación real entre bloques
+      int gap_h = 2;
+      int divider_h = 1;
+
+      // Altura correcta del bloque superior
+      int top_h = screen_h - bottom_h - (gap_h * 2) - divider_h;
+
+      // Ancho de cada columna del bloque superior
+      int col_w = screen_w / 3;
+
+      // Posición Y de la línea separadora
+      int divider_y = top_h + gap_h;
+
+      // Línea separadora
+      it.line(0, divider_y, screen_w, divider_y, id(color_negro));
+
+      // Líneas verticales del bloque superior
+      it.line(col_w, 0, col_w, top_h, id(color_negro));
+      it.line(col_w * 2, 0, col_w * 2, top_h, id(color_negro));
+
+      // Títulos Frigate
+      it.print(col_w / 2, 0, id(fuente_8), id(color_negro), TextAlign::TOP_CENTER, "Frigate A");
+      it.print(col_w + col_w / 2, 0, id(fuente_8), id(color_negro), TextAlign::TOP_CENTER, "Frigate M");
+
+      // Función para barras verticales
+      auto draw_bar = [&](int x, int y_base, int segments, int filled, Color color) {
+        int seg_h = 10;
+        int seg_w = 14;
+        for (int i = 0; i < segments; i++) {
+          int y = y_base - i * (seg_h + 2);
+          if (i < filled) {
+            it.filled_rectangle(x, y, seg_w, seg_h, color);
+          }
+          it.rectangle(x, y, seg_w, seg_h, id(color_negro));
+        }
+      };
+
+      // Base inferior de las barras (con margen real)
+      int bar_base = top_h - 30;
+
+      // ---- Frigate A ----
+      int cpu_fa = isnan(id(cpu_usage).state) ? 0 : (int)(id(cpu_usage).state / 20);
+      int ram_fa = isnan(id(ram_percent).state) ? 0 : (int)(id(ram_percent).state / 20);
+
+      cpu_fa = std::min(cpu_fa, 5);
+      ram_fa = std::min(ram_fa, 5);
+
+      Color ram_fa_color = (id(ram_percent).state > 80) ? id(color_rojo) : id(color_negro);
+
+      draw_bar(col_w / 2 - 20, bar_base, 5, cpu_fa, id(color_negro));
+      draw_bar(col_w / 2 + 10, bar_base, 5, ram_fa, ram_fa_color);
+
+      it.print(col_w / 2 - 13, bar_base + 9, id(fuente_8), id(color_negro), TextAlign::TOP_CENTER, "CPU");
+      it.print(col_w / 2 + 17, bar_base + 9, id(fuente_8), id(color_negro), TextAlign::TOP_CENTER, "RAM");
+
+      // ---- Frigate M ----
+      int cpu_fm = isnan(id(cpu_usage2).state) ? 0 : (int)(id(cpu_usage2).state / 20);
+      int ram_fm = isnan(id(ram_percent2).state) ? 0 : (int)(id(ram_percent2).state / 20);
+
+      cpu_fm = std::min(cpu_fm, 5);
+      ram_fm = std::min(ram_fm, 5);
+
+      Color ram_fm_color = (id(ram_percent2).state > 80) ? id(color_rojo) : id(color_negro);
+
+      draw_bar(col_w + col_w / 2 - 20, bar_base, 5, cpu_fm, id(color_negro));
+      draw_bar(col_w + col_w / 2 + 10, bar_base, 5, ram_fm, ram_fm_color);
+
+
+      it.print(col_w + col_w / 2 - 13, bar_base + 9, id(fuente_8), id(color_negro), TextAlign::TOP_CENTER, "CPU");
+      it.print(col_w + col_w / 2 + 17, bar_base + 9, id(fuente_8), id(color_negro), TextAlign::TOP_CENTER, "RAM");
+
+      // ---- Bloque derecho: hora + clima ----
+      int info_x = col_w * 2 + 8;
+      
+      //Hora
+      auto now = id(esptime).now();
+      if (now.is_valid()) {
+        char time_str[6];
+        snprintf(time_str, sizeof(time_str), "%02d:%02d", now.hour, now.minute);
+        it.print(info_x, -15, id(fuente_28), id(color_negro), time_str);
+      }
+      //Temperatura y humedad
+      char buf[24];
+      snprintf(buf, sizeof(buf), "        %.1fC", id(temperatura_interior).state);
+      it.print(info_x, 36, id(fuente_14), id(color_negro), buf);
+
+      snprintf(buf, sizeof(buf), "%.0f%%", id(humedad_interior).state);
+      it.print(info_x, 44, id(fuente_14), id(color_negro), buf);
+
+      snprintf(buf, sizeof(buf), "        %.1fC", id(temperatura_exterior).state);
+      it.print(info_x, 72, id(fuente_14), id(color_negro), buf);
+
+      snprintf(buf, sizeof(buf), "%.0f%%", id(humedad_exterior).state);
+      it.print(info_x, 82, id(fuente_14), id(color_negro), buf);
+
+      // ---- Bloque inferior: estados ----
+      int status_y = divider_y + divider_h + gap_h;
+
+      int step = screen_w / 5;
+      const char* labels[5] = {"P1", "P2", "P3", "D1", "D2"};
+      
+      enum Estado {
+        ESTADO_OK,
+        ESTADO_KO,
+        ESTADO_DESCONOCIDO
+      };
+
+      auto estado_from_string = [&](const std::string &state) {
+        if (state.empty()) {
+          return ESTADO_DESCONOCIDO;
+        }
+
+        std::string s = state;
+        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+
+        if (s.find("running") != std::string::npos ||
+            s.find("online")  != std::string::npos ||
+            s == "on") {
+          return ESTADO_OK;
+        }
+
+        return ESTADO_KO;
+      };
+
+
+      Estado states_enum[5] = {
+        estado_from_string(id(proxmox_status).state),
+        estado_from_string(id(proxmox2_status).state),
+        estado_from_string(id(proxmox4_status).state),
+        estado_from_string(id(debian1_status).state),
+        estado_from_string(id(debian2_status).state)
+      };
+
+
+      ESP_LOGD(
+        "STATUS",
+        "P1='%s' | P2='%s' | P3='%s' | D1='%s' | D2='%s'",
+        id(proxmox_status).state.c_str(),
+        id(proxmox2_status).state.c_str(),
+        id(proxmox4_status).state.c_str(),
+        id(debian1_status).state.c_str(),
+        id(debian2_status).state.c_str()
+      );
+      for (int i = 0; i < 5; i++) {
+        int cx = step * i + step / 2;
+
+        it.print(cx - 10, status_y, id(fuente_8), id(color_negro), TextAlign::RIGHT, labels[i]);
+        int cy = status_y + 8;
+        int r  = 6;
+
+        if (states_enum[i] == ESTADO_OK) {
+          it.filled_circle(cx + 6, cy, r, id(color_negro));
+        }
+        else if (states_enum[i] == ESTADO_KO) {
+          it.filled_circle(cx + 6, cy, r, id(color_rojo));
+        }
+        else {
+          it.circle(cx + 6, cy, r, id(color_negro));
+        }
+      }
+
+interval:
+  - interval: 900s
+    then:
+      - switch.turn_on: update_display
+
+time:
+  - platform: sntp
+    id: esptime
+    timezone: "Europe/Madrid"
+
+button:
+  - platform: restart
+    name: "Reiniciar ESP Pantalla"
+
+  - platform: template
+    name: "Forzar Deep Sleep Pantalla"
+    on_press:
+      then:
+        - output.turn_off: power_sensors
+        - delay: 2s
+        - deep_sleep.enter:
+            id: deep_sleep_1
+            sleep_duration: !lambda 'return (uint32_t) id(sleep_time).state * 1000;'
+
+switch:
+  - platform: template
+    name: "Actualizar pantalla manual"
+    id: update_display
+    turn_on_action:
+      - component.update: main_display
+      - switch.turn_off: update_display
+
+number:
+  - platform: template
+    name: "Duración activa Pantalla"
+    id: run_time
+    min_value: 1
+    max_value: 360000
+    initial_value: 12000
+    step: 1
+    unit_of_measurement: s
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Tiempo en Deep Sleep Pantalla"
+    id: sleep_time
+    min_value: 10
+    max_value: 3600
+    step: 1
+    unit_of_measurement: s
+    restore_value: true
+    optimistic: true
+    initial_value: 60
+
+  - platform: template
+    name: "Intervalo de refresco pantalla"
+    id: refresh_control
+    min_value: 1
+    max_value: 600
+    step: 10
+    initial_value: 60
+    optimistic: true
+
+output:
+  - platform: gpio
+    id: power_sensors
+    pin: GPIO11
+
+deep_sleep:
+  id: deep_sleep_1
+
+script:
+  - id: go_to_sleep_delayed
+    then:
+      - delay: !lambda 'return (uint32_t)(id(run_time).state - 2) * 1000;'
+      - output.turn_off: power_sensors
+      - delay: 2s
+      - deep_sleep.enter:
+          id: deep_sleep_1
+          sleep_duration: !lambda 'return (uint32_t) id(sleep_time).state * 1000;'
