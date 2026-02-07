@@ -1,0 +1,20 @@
+# Centralized network configs for ESP devices
+# Use this file to store static IPs and network settings for devices.
+
+# Network settings
+ip_prefix: "10.2.1"                # useful if you compose IPs by joining prefix + host
+net_gateway: "10.2.0.1"
+net_mask: "255.255.252.0"
+net_dns1: "10.2.0.3"
+net_dns2: "8.8.8.8"
+
+# Device-specific entries (full IPs for convenience)
+frigate: "10.2.1.100"        # led-cocina
+
+led_cocina_ip: "10.2.1.101" 
+led_8x8_madrid_1_ip: "10.2.1.103"
+led_8x8_madrid_cocina_ip: "10.2.1.104"
+led_8x8_madrid_banio_ip: "10.2.1.105"
+# How to add more devices:
+# - Either add full IP entries like `device_x_ip: "10.2.1.102"`
+# - Or add host numbers: `device_x_host: "102"` and then use `"${ip_prefix}.${device_x_host}"` if your ESPHome version supports nested substitutions.

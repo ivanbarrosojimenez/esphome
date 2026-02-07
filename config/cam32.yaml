@@ -1,0 +1,62 @@
+esphome:
+  name: cam32
+  friendly_name: cam32
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "/Bd/UmK2iQUMlgQ1pUT9uQerFH/peLwxM774BKS1v6Y="
+
+ota:
+  password: "00abe61812d19e47e79d26b862ada48c"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Cam32 Fallback Hotspot"
+    password: "5EVgMC3NW6su"
+
+captive_portal:
+
+esp32_camera:
+  name: esp32cam
+  setup_priority: -200
+  external_clock:
+    pin: GPIO0
+    frequency: 20MHz
+  i2c_pins:
+    sda: GPIO26
+    scl: GPIO27
+  data_pins: [GPIO5, GPIO18, GPIO19, GPIO21, GPIO36, GPIO39, GPIO34, GPIO35]
+  vsync_pin: GPIO25
+  href_pin: GPIO23
+  pixel_clock_pin: GPIO22
+  power_down_pin: GPIO32
+
+light:
+  - platform: binary
+    output: light_output
+    name: "ESP32Cam light"
+binary_sensor:
+  - platform: status
+    name: "ESP32Cam status"
+sensor:
+  - platform: wifi_signal
+    name: "ESP32Cam WiFi Signal"
+    update_interval: 30s
+
+output:
+  - id: light_output
+    platform: gpio
+    pin: GPIO4

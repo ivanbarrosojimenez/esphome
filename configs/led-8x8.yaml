@@ -1,0 +1,8 @@
+# DEPRECATED: use `configs/configs.yaml` to centralize network settings
+# The IP for this device is now set in `configs/configs.yaml` as `led_8x8_ip: "10.2.1.102"`
+# Kept for reference only.
+net_gateway: 10.2.0.1
+net_mask: 255.255.252.0
+# Optional DNS entries:
+# net_dns1: 10.2.0.3
+# net_dns2: 8.8.8.8

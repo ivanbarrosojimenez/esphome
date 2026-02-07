@@ -1,0 +1,236 @@
+﻿esphome:
+  name: pantalla-ink-salon
+  friendly_name: Pantalla ink salon
+  on_boot:
+    priority: 600.0
+    then:
+      - output.turn_on: power_sensors
+      - delay: 300ms
+      - lambda: |-
+          id(pantalla_activa) = true;
+      - script.execute: go_to_sleep_delayed
+
+esp32: 
+  board: seeed_xiao_esp32c3
+  variant: esp32c3
+  framework:
+    type: arduino
+
+web_server:
+  port: 80
+
+logger:
+
+api:
+  encryption:
+    key: "k0A1n2X3z4Y5p6Q7r8S9t0U1v2W3x4Y5z6A7b8C9d0E=" 
+  reboot_timeout: 0s
+
+wifi:
+  ssid: "Win32:Ranson[Trj]M"
+  password: "iv@n2016:"
+  fast_connect: true
+  ap:
+    ssid: "pantalla-c3-fallback"
+    password: "12345678"
+
+captive_portal:
+
+ota:
+  platform: esphome
+
+i2c:
+  sda: GPIO8
+  scl: GPIO9
+  scan: true
+  id: bus_a
+  frequency: 50000Hz
+
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO6
+
+globals:
+  - id: pantalla_activa
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+  # Ejemplo estático para prueba de interfaz
+  - id: cpu_usage
+    type: float
+    initial_value: '12.0'
+  - id: cpu_temp
+    type: float
+    initial_value: '42.5'
+  - id: ram_used
+    type: float
+    initial_value: '0.5'
+  - id: ram_total
+    type: float
+    initial_value: '4.0'
+  - id: disk_used
+    type: float
+    initial_value: '13.2'
+  - id: disk_total
+    type: float
+    initial_value: '26.8'
+
+color:
+  - id: color_negro
+    hex: "000000"
+  - id: color_blanco
+    hex: "FFFFFF"
+
+font:
+  - file: "SpringEgg.ttf"
+    id: fuente_32
+    size: 32
+  - file: "SpringEgg.ttf"
+    id: fuente_16
+    size: 16
+
+display:
+  - platform: waveshare_epaper
+    model: 2.90inv2-r2
+    cs_pin: GPIO5
+    dc_pin: GPIO2
+    reset_pin: GPIO1
+    busy_pin: GPIO0
+    rotation: 90
+    update_interval: 60s
+    full_update_every: 1440
+    auto_clear_enabled: true
+    id: main_display
+    lambda: |-
+      if (!id(pantalla_activa)) return;
+
+      it.fill(id(color_blanco));
+
+      // ----------- Gauge semicircular CPU -----------
+      float percent = id(cpu_usage);
+      int cx = 30;     
+      int cy = 50;     
+      int r = 20;      
+      float start_angle = -M_PI;  
+      float end_angle = 0;
+
+      for (float angle = start_angle; angle <= start_angle + (percent/100.0)*(end_angle-start_angle); angle += 0.05) {
+        int x = cx + cos(angle) * r;
+        int y = cy + sin(angle) * r;
+        it.draw_pixel(x, y, id(color_negro));
+      }
+
+      char cpu_text[20];
+      sprintf(cpu_text, "%.1f%%", percent);
+      it.print(cx, cy + 25, id(fuente_16), id(color_negro), TextAlign::TOP_CENTER, cpu_text);
+
+      char temp_text[20];
+      sprintf(temp_text, "%.1f°C", id(cpu_temp));
+      it.print(cx, cy + 40, id(fuente_16), id(color_negro), TextAlign::TOP_CENTER, temp_text);
+
+      // ----------- Barra RAM -----------
+      float ram_percent = (id(ram_used) / id(ram_total)) * 100;
+      int bar_x = 70, bar_y = 40, bar_w = 200, bar_h = 12;
+      int fill_w = (int)(bar_w * ram_percent / 100.0);
+
+      it.draw_rectangle(bar_x, bar_y, bar_w, bar_h, id(color_negro));
+      it.filled_rectangle(bar_x, bar_y, fill_w, bar_h, id(color_negro));
+
+      char ram_text[30];
+      sprintf(ram_text, "RAM: %.1f/%.1f GB", id(ram_used), id(ram_total));
+      it.print(bar_x, bar_y - 16, id(fuente_16), id(color_negro), TextAlign::TOP_LEFT, ram_text);
+
+      // ----------- Barra DISK -----------
+      float disk_percent = (id(disk_used) / id(disk_total)) * 100;
+      bar_y = 70;
+      fill_w = (int)(bar_w * disk_percent / 100.0);
+
+      it.draw_rectangle(bar_x, bar_y, bar_w, bar_h, id(color_negro));
+      it.filled_rectangle(bar_x, bar_y, fill_w, bar_h, id(color_negro));
+
+      char disk_text[30];
+      sprintf(disk_text, "DISK: %.1f/%.1f GB", id(disk_used), id(disk_total));
+      it.print(bar_x, bar_y - 16, id(fuente_16), id(color_negro), TextAlign::TOP_LEFT, disk_text);
+
+interval:
+  - interval: 60s
+    then:
+      - switch.turn_on: update_display
+
+time:
+  - platform: sntp
+    id: esptime
+    timezone: "Europe/Madrid"
+
+button:
+  - platform: restart
+    name: "Reiniciar ESP Pantalla"
+
+  - platform: template
+    name: "Forzar Deep Sleep Pantalla"
+    on_press:
+      then:
+        - output.turn_off: power_sensors
+        - delay: 2s
+        - deep_sleep.enter:
+            id: deep_sleep_1
+            sleep_duration: !lambda 'return (uint32_t) id(sleep_time).state * 1000;'
+
+switch:
+  - platform: template
+    name: "Actualizar pantalla manual"
+    id: update_display
+    turn_on_action:
+      - component.update: main_display
+      - switch.turn_off: update_display
+
+number:
+  - platform: template
+    name: "Duración activa Pantalla"
+    id: run_time
+    min_value: 1
+    max_value: 360000
+    initial_value: 12000
+    step: 1
+    unit_of_measurement: s
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Tiempo en Deep Sleep Pantalla"
+    id: sleep_time
+    min_value: 10
+    max_value: 3600
+    step: 1
+    unit_of_measurement: s
+    restore_value: true
+    optimistic: true
+    initial_value: 60
+
+  - platform: template
+    name: "Intervalo de refresco pantalla"
+    id: refresh_control
+    min_value: 1
+    max_value: 600
+    step: 10
+    initial_value: 60
+    optimistic: true
+
+output:
+  - platform: gpio
+    id: power_sensors
+    pin: GPIO11
+
+deep_sleep:
+  id: deep_sleep_1
+
+script:
+  - id: go_to_sleep_delayed
+    then:
+      - delay: !lambda 'return (uint32_t)(id(run_time).state - 2) * 1000;'
+      - output.turn_off: power_sensors
+      - delay: 2s
+      - deep_sleep.enter:
+          id: deep_sleep_1
+          sleep_duration: !lambda 'return (uint32_t) id(sleep_time).state * 1000;'

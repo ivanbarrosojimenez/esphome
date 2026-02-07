@@ -1,0 +1,424 @@
+esphome:
+  name: led-potencia-cocina
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          id(oled).turn_off();
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+    password: ""
+
+wifi:
+  ssid: "Win32:Ranson[Trj]M"
+  password: "iv@n2016:"
+
+  ap:
+    ssid: "ABROBOT-OLED"
+    password: "12345678"
+
+captive_portal:
+
+i2c:
+  sda: GPIO5
+  scl: GPIO6
+  id: bus_a
+  scan: true
+
+font:
+  - file: "fonts\\Technology.ttf"
+    id: font_small
+    size: 12
+
+  - file: "fonts\\SpringEgg.ttf"
+    id: font_big
+    size: 23
+
+binary_sensor:
+  - platform: homeassistant
+    id: presencia_cocina
+    entity_id: binary_sensor.presencia_cocina_madrid_presence
+    internal: true
+    on_press:
+      - lambda: |-
+          if (!id(oled_enabled).state) return;
+          if (!id(potencia_casa).has_state()) return;
+          if (id(potencia_casa).state <= id(umbral_potencia).state) return;
+
+          id(oled).turn_on();
+          id(oled).update();
+      - script.execute: actualizar_anillo
+
+    on_release:
+      - lambda: |-
+          if (!id(oled_manual).state) {
+            id(oled).turn_off();
+          }
+
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+sensor:
+  - platform: homeassistant
+    id: potencia_casa
+    entity_id: sensor.potencia_casa_madrid_power
+    internal: true
+    on_value:
+      - script.execute: actualizar_anillo
+      
+output:
+  - platform: gpio
+    pin: GPIO8
+    inverted: true
+    id: led_onboard
+
+light:
+  - platform: binary
+    output: led_onboard
+    name: "LED ABROBOT"
+
+  - platform: neopixelbus
+    type: GRB
+    variant: WS2812
+    pin: GPIO3
+    num_leds: 8
+    name: "Anillo LED"
+    id: anillo
+    restore_mode: ALWAYS_OFF
+    effects:
+      - addressable_lambda:
+          name: "Indicador potencia"
+          lambda: |-
+            const int NUM_LEDS = 8;
+
+            it.all() = Color(0, 0, 0);
+
+            if (!id(potencia_casa).has_state()) return;
+
+            float potencia = id(potencia_casa).state;
+            float max_p = id(potencia_max_dia).state;
+
+            if (potencia <= 0 || max_p <= 0) return;
+
+            float porcentaje = potencia / max_p;
+            if (porcentaje < 0) porcentaje = 0;
+
+            int objetivo = ceil(porcentaje * NUM_LEDS);
+            if (objetivo < 1) objetivo = 1;
+            if (objetivo > NUM_LEDS) objetivo = NUM_LEDS;
+
+            id(leds_objetivo) = objetivo;
+
+            if (id(leds_actuales) < id(leds_objetivo)) {
+              id(leds_actuales)++;
+            } else if (id(leds_actuales) > id(leds_objetivo)) {
+              id(leds_actuales)--;
+            }
+
+            Color c;
+            if (porcentaje < 0.125) {
+              c = Color(0, 255, 0);        // verde claro
+            } else if (porcentaje < 0.25) {
+              c = Color(128, 255, 0);      // verde lima
+            } else if (porcentaje < 0.375) {
+              c = Color(200, 200, 0);      // amarillo claro
+            } else if (porcentaje < 0.50) {
+              c = Color(255, 255, 0);      // amarillo
+            } else if (porcentaje < 0.625) {
+              c = Color(255, 200, 0);      // naranja claro
+            } else if (porcentaje < 0.75) {
+              c = Color(255, 165, 0);      // naranja
+            } else if (porcentaje < 0.875) {
+              c = Color(255, 100, 0);      // rojo naranja
+            } else {
+              c = Color(255, 0, 0);        // rojo puro
+            }
+
+            bool exceso = potencia > max_p;
+            unsigned long ahora = millis();
+
+            // Parpadeo progresivo según el nivel de exceso
+            // >100%: 1000ms (parpadeo lento, 1 segundo)
+            // >110%: 500ms (parpadeo medio, medio segundo)
+            // >120%: patrón especial (3 rápidos + pausa)
+            bool encendido = true;
+            
+            if (exceso) {
+              if (potencia > max_p * 1.20) {
+                // >120%: Patrón especial: 3 parpadeos rápidos (120ms cada) + pausa (360ms)
+                // Ciclo total: 120 + 120 + 120 + 120 + 120 + 120 + 360 = 960ms
+                unsigned long ciclo = ahora % 960;
+                if (ciclo < 120 || (ciclo >= 240 && ciclo < 360) || (ciclo >= 480 && ciclo < 600)) {
+                  encendido = true;   // Encendido durante los 3 parpadeos
+                } else {
+                  encendido = false;  // Apagado entre parpadeos y durante pausa
+                }
+              } else if (potencia > max_p * 1.10) {
+                // >110%: parpadeo medio (500ms)
+                encendido = (ahora / 500) % 2 == 0;
+              } else {
+                // >100%: parpadeo lento (1000ms)
+                encendido = (ahora / 1000) % 2 == 0;
+              }
+            }
+
+            // Si hay exceso, encender todos 8 LEDs en rojo (con parpadeo si es grave)
+            // Si no hay exceso, encender solo los que corresponden al porcentaje
+            int leds_a_encender = exceso ? NUM_LEDS : id(leds_actuales);
+            
+            // Aplicar brillo automático según hora del día
+            int hora = id(ha_time).now().hour;
+            float brillo = (hora >= 22 || hora < 7)
+                            ? id(brillo_anillo_noche).state / 100.0
+                            : id(brillo_anillo).state / 100.0;
+
+            for (int i = 0; i < leds_a_encender; i++) {
+              if (encendido) {
+                Color led_color = exceso ? Color(255, 0, 0) : c;
+                it[i] = Color(
+                  (uint8_t)(led_color.red * brillo),
+                  (uint8_t)(led_color.green * brillo),
+                  (uint8_t)(led_color.blue * brillo)
+                );
+              }
+            }
+
+
+
+
+display:
+  - platform: ssd1306_i2c
+    id: oled
+    invert: True
+    model: "SSD1306 72x40"
+    address: 0x3C
+    offset_x: 0
+    offset_y: 0
+    update_interval: 20s
+    lambda: |-
+      // Validar que potencia_casa tenga estado antes de acceder
+      if (!id(potencia_casa).has_state()) {
+        return;
+      }
+
+      // Verificar si la pantalla debe estar encendida
+      bool oled_debe_encenderse = false;
+
+      // Modo automático: requiere presencia y condiciones adicionales
+      if (id(oled_enabled).state && id(presencia_cocina).state &&
+          id(potencia_casa).state > id(umbral_potencia).state) {
+        oled_debe_encenderse = true;
+      }
+
+      // Modo manual: se enciende sin depender de presencia
+      if (id(oled_manual).state) {
+        oled_debe_encenderse = true;
+      }
+
+      if (!oled_debe_encenderse) {
+        return;
+      }
+
+      it.clear();
+      it.printf(
+        1,
+        -6,
+        id(font_big),
+        "%.0f",
+        id(potencia_casa).state
+      );
+
+
+switch:
+  - platform: template
+    name: "Pantalla OLED habilitada"
+    id: oled_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - lambda: |-
+          if (id(presencia_cocina).state) {
+            id(oled).turn_on();
+            id(oled).update();
+          }
+    on_turn_off:
+      - lambda: |-
+          id(oled).turn_off();
+
+  - platform: template
+    name: "Pantalla OLED manual"
+    icon: mdi:monitor
+    id: oled_manual
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: |-
+          id(oled).turn_on();
+          id(oled).update();
+    on_turn_off:
+      - lambda: |-
+          id(oled).turn_off();
+
+  - platform: template
+    name: "Anillo potencia habilitado"
+    id: anillo_automatico_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - lambda: |-
+          if (id(presencia_cocina).state) {
+            id(actualizar_anillo).execute();
+          }
+    on_turn_off:
+      - lambda: |-
+          id(anillo).turn_off();
+
+  - platform: template
+    name: "Anillo potencia manual"
+    icon: mdi:led-strip-variant
+    id: anillo_manual
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          id(actualizar_anillo).execute();
+    on_turn_off:
+      - lambda: |-
+          id(anillo).turn_off();
+
+number:
+  - platform: template
+    name: "Umbral potencia OLED"
+    id: umbral_potencia
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 4000
+    step: 100
+    initial_value: 100
+    
+  - platform: template
+    name: "Potencia máxima día"
+    id: potencia_max_dia
+    min_value: 100
+    max_value: 4000
+    step: 100
+    initial_value: 3600
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Brillo anillo potencia"
+    id: brillo_anillo
+    optimistic: true
+    restore_value: true
+    min_value: 30
+    max_value: 100
+    step: 1
+    initial_value: 50
+
+  - platform: template
+    name: "Brillo anillo potencia (noche)"
+    id: brillo_anillo_noche
+    optimistic: true
+    restore_value: true
+    min_value: 30
+    max_value: 100
+    step: 1
+    initial_value: 30
+
+globals:
+  - id: leds_actuales
+    type: int
+    restore_value: false
+    initial_value: "0"
+
+  - id: leds_objetivo
+    type: int
+    restore_value: false
+    initial_value: "0"
+
+  - id: leds_anillo_activos
+    type: int
+    restore_value: false
+    initial_value: "0"
+
+
+script:
+  - id: actualizar_anillo
+    mode: restart
+    then:
+      - lambda: |-
+          if (!id(potencia_casa).has_state()) {
+            id(leds_anillo_activos) = 0;
+            id(anillo).turn_off();
+            return;
+          }
+
+          // Si ambos switches están desactivados, apagar completamente
+          if (!id(anillo_automatico_enabled).state && !id(anillo_manual).state) {
+            id(leds_anillo_activos) = 0;
+            id(anillo).turn_off();
+            return;
+          }
+
+          // Si está en modo automático, requiere presencia
+          bool debe_encender = false;
+          if (id(anillo_automatico_enabled).state && id(presencia_cocina).state) {
+            debe_encender = true;
+          }
+          // Si está en modo manual, se enciende sin importar presencia
+          if (id(anillo_manual).state) {
+            debe_encender = true;
+          }
+
+          if (!debe_encender) {
+            id(leds_anillo_activos) = 0;
+            id(anillo).turn_off();
+            return;
+          }
+
+          float potencia = id(potencia_casa).state;
+
+          if (potencia <= 0) {
+            id(leds_anillo_activos) = 0;
+            id(anillo).turn_off();
+            return;
+          }
+
+          // determine day/night maximum like in the LED effect
+          float max_p = id(potencia_max_dia).state;
+
+          if (max_p <= 0) {
+            id(leds_anillo_activos) = 0;
+            id(anillo).turn_off();
+            return;
+          }
+
+          int leds = (int) ceil((potencia / max_p) * 8.0);
+          if (leds < 1) leds = 1;
+          if (leds > 8) leds = 8;
+
+          id(leds_anillo_activos) = leds;
+
+          // Aplicar brillo automático según hora
+          int hora = id(ha_time).now().hour;
+          float brillo = (hora >= 22 || hora < 7)
+                          ? id(brillo_anillo_noche).state / 100.0
+                          : id(brillo_anillo).state / 100.0;
+
+          auto call = id(anillo).turn_on();
+          call.set_effect("Indicador potencia");
+          call.set_brightness(brillo);
+          call.perform();
