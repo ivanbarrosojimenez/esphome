@@ -1,7 +1,8 @@
 ﻿esphome:
   name: pantalla-calendario-4-2-1
   friendly_name: pantalla-calendario-4-2-1
-  includes: ["src/pantalla_helpers.h"]
+
+  includes: ["src/pantalla_helpers.h", "src/pantalla_config.h", "src/pantalla_fonts.h", "src/pantalla_draw.h", "src/pantalla_calendar_parser.h"]
   on_boot:
     priority: -10
     then:
@@ -9,7 +10,7 @@
       - script.execute: ensure_painted_on_boot
       - script.execute: refresh_loop
 # external_components removed to prefer local custom_components/waveshare_epaper
-
+substitutions: !include ../configs/configs.yaml
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -27,9 +28,15 @@ api:
   reboot_timeout: 0s
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
+  ssid: !secret wifi_ssid_madrid
+  password: !secret wifi_password_madrid
   fast_connect: true
+  manual_ip:
+    static_ip: ${pantalla_madrid_4_2_1}
+    gateway: ${net_gateway}
+    subnet: ${net_mask}
+    dns1: ${net_dns1}
+    dns2: ${net_dns2}
   ap:
     ssid: "pantalla-c3-fallback"
     password: !secret ap_password
@@ -42,7 +49,7 @@ ota:
 globals:
   - id: pantalla_activa
     type: bool
-    restore_value: yes
+    restore_value: no
     initial_value: 'false'
 
   - id: force_refresh
@@ -52,22 +59,22 @@ globals:
 
   - id: last_refresh
     type: std::string
-    restore_value: yes
+    restore_value: no
     initial_value: ''
 #Calendario
   - id: calendario_json
     type: std::string
-    restore_value: yes
+    restore_value: no
     initial_value: ''
 
   - id: last_calendar_hash
     type: std::string
-    restore_value: yes
+    restore_value: no
     initial_value: ''
 
   - id: last_processed_hash
     type: std::string
-    restore_value: yes
+    restore_value: no
     initial_value: ''
 
   - id: cal_changed
@@ -82,7 +89,7 @@ globals:
 
   - id: last_drawn_ok
     type: bool
-    restore_value: yes
+    restore_value: no
     initial_value: 'false'
 
   - id: using_cache
@@ -100,21 +107,27 @@ globals:
     restore_value: no
   - id: cal_day
     type: std::vector<std::string>
+    restore_value: no
   - id: cal_title
     type: std::vector<std::string>
+    restore_value: no
   - id: cal_time
     type: std::vector<std::string>
+    restore_value: no
   - id: cal_location
     type: std::vector<std::string>
+    restore_value: no
   - id: cal_when
     type: std::vector<std::string>
+    restore_value: no
 
 
 color:
+  # NOTE: e-paper display uses inverted colors compared to typical RGB: "ink" is white (#FFFFFF), "paper" is black (#000000)
   - id: color_negro
-    hex: "FFFFFF"   # Invertido para e-paper
+    hex: "FFFFFF"   # Ink color for e-paper (logical 'black')
   - id: color_blanco
-    hex: "000000"   # Invertido para e-paper
+    hex: "000000"   # Paper color for e-paper (logical 'white')
   - id: color_dark_gray
     red_int: 169
     green_int: 169
@@ -124,87 +137,53 @@ color:
     green_int: 84
     blue_int: 84
 
-
 font:
   # Fuentes para título (tamaños variables)
   - file: "../fonts/Palatino.ttf"
     id: fuente_titulo_16
     size: 16
-    glyphs: >-
+    glyphs: &glyphs >-
       !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
   - file: "../fonts/Palatino.ttf"
     id: fuente_titulo_18
     size: 18
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
-    id: fuente_28
+    id: fuente_titulo_20
     size: 20
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
     id: fuente_titulo_22
     size: 22
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
     id: fuente_titulo_24
     size: 24
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
 
   # Fuentes para fecha (tamaños variables)
   - file: "../fonts/Palatino.ttf"
     id: fuente_fecha_12
     size: 12
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
-    id: fuente_14
+    id: fuente_fecha_16
     size: 16
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
     id: fuente_fecha_18
     size: 18
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
     id: fuente_fecha_20
     size: 20
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
-
-  - file: "../fonts/Roboto.ttf"
-    id: fuente_8_2
-    size: 12
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
 
   - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
     id: fuente_8
     size: 12
-    glyphs: >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
 
-
-sensor:
-  #Temperaturas
-  - platform: homeassistant
-    entity_id: sensor.calidad_aire_madrid_temperature
-    id: temperatura_interior
-  - platform: homeassistant
-    entity_id: sensor.calidad_aire_madrid_humidity
-    id: humedad_interior
-
-
-  - platform: homeassistant
-    entity_id: sensor.temperatura_calle_solar_madrid_temperature
-    id: temperatura_exterior
-  - platform: homeassistant
-    entity_id: sensor.temperatura_calle_solar_madrid_humidity
-    id: humedad_exterior
-  
 
 text_sensor:
 #Sensor calendario
@@ -328,53 +307,33 @@ switch:
     name: "Pantalla auto-sleep habilitado"
     id: autosleep_enabled
     optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
+    restore_mode: RESTORE_DEFAULT_OFF
 
 select:
   - platform: template
-    name: "UI tamaño fuente título"
-    id: ui_font_title_size
-    options:
-      - "16"
-      - "18"
-      - "20"
-      - "22"
-      - "24"
-    initial_option: "20"
-    optimistic: true
-    restore_value: true
-
-  - platform: template
-    name: "UI tamaño fuente fecha"
-    id: ui_font_date_size
+    name: "UI tamaño fuente"
+    id: ui_font_size
     options:
       - "12"
       - "14"
       - "16"
       - "18"
       - "20"
+      - "22"
+      - "24"
     initial_option: "16"
     optimistic: true
     restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "ui_font_size on_value: %s", x.c_str());
 
 #Sensor HA
 binary_sensor:
   - platform: homeassistant
     entity_id: input_boolean.gente_en_casa_madrid
     id: gente_en_casa
-
-  - platform: homeassistant
-    entity_id: binary_sensor.node_proxmox_status
-    id: proxmox_status
-
-  - platform: homeassistant
-    entity_id: binary_sensor.node_proxmox2_status
-    trigger_on_initial_state: true
-    id: proxmox2_status
-
-  - platform: homeassistant
-    entity_id: binary_sensor.node_proxmox4_status
-    id: proxmox4_status
 
 number:
   - platform: template
@@ -387,6 +346,10 @@ number:
     unit_of_measurement: s
     restore_value: true
     optimistic: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "run_time on_value: %f", x);
 
   - platform: template
     name: "Tiempo en Deep Sleep Pantalla"
@@ -404,11 +367,15 @@ number:
     id: refresh_control
     min_value: 1
     max_value: 120
-    initial_value: 10
+    initial_value: 30
     step: 1
     unit_of_measurement: min
     restore_value: true
     optimistic: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "refresh_control on_value: %f", x);
     # This value is used by the `refresh_loop` script (in minutes) to control how often the display
     # is updated when `Pantalla refresco habilitado` and `gente_en_casa` are true.
 
@@ -419,9 +386,13 @@ number:
     min_value: 0
     max_value: 23
     step: 1
-    initial_value: 8
+    initial_value: 7
     optimistic: true
     restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "refresh_start_hour on_value: %f", x);
 
   - platform: template
     name: "Pantalla hora fin"
@@ -429,20 +400,28 @@ number:
     min_value: 0
     max_value: 23
     step: 1
-    initial_value: 22
+    initial_value: 23
     optimistic: true
     restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "refresh_end_hour on_value: %f", x);
 
   - platform: template
     name: "UI factor densidad"
     id: ui_density_factor
     min_value: -10
     max_value: 10
-    initial_value: 0
+    initial_value: 2
     step: 1
     unit_of_measurement: "px"
     optimistic: true
     restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "ui_density_factor on_value: %f", x);
 
 output:
   - platform: gpio
@@ -581,273 +560,5 @@ script:
 #Calendario
   - id: procesar_calendario
     then:
-      - lambda: |-
-
-          // Función auxiliar para trim (elimina espacios al inicio y final)
-          auto trim = [](std::string &s) {
-            s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
-            s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), s.end());
-          };
-          // Función para normalizar texto (solo permite caracteres definidos en las fuentes)
-          const std::string allowed_chars = "!\"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ";
-          auto normalize = [allowed_chars](std::string &s) {
-            for (char &c : s) {
-              if (allowed_chars.find(c) == std::string::npos) {
-                c = ' ';
-              }
-            }
-          };
-          // Función para truncar texto a longitud máxima
-          auto truncate = [](std::string &s, size_t max_len) {
-            if (s.size() > max_len) {
-              s = s.substr(0, max_len);
-            }
-          };
-
-          id(cal_day).clear();
-          id(cal_title).clear();
-          id(cal_time).clear();
-          id(cal_location).clear();
-          id(cal_when).clear();
-
-          // Reset connection error tracking
-          id(connection_error) = "";
-          id(using_cache) = false;
-
-          // Check WiFi connection
-          if (!WiFi.isConnected()) {
-            id(connection_error) = "Sin WiFi";
-            ESP_LOGW("calendar", "WiFi not connected");
-          }
-
-          // Prefer HA sensor JSON, fallback to cached `calendario_json`
-          const std::string &json_sensor = id(calendario_eventos_raw).state;
-          std::string json_str;
-          if (!json_sensor.empty()) {
-            json_str = json_sensor;
-            id(calendario_json) = json_sensor; // update persistent cache
-            // Clear connection error if we got fresh data
-            if (id(connection_error).empty() || id(connection_error) == "Sin WiFi") {
-              id(connection_error) = "";
-            }
-          } else if (!id(calendario_json).empty()) {
-            json_str = id(calendario_json);
-            id(using_cache) = true;
-            if (id(connection_error).empty()) {
-              id(connection_error) = "Sin HA";
-            }
-            ESP_LOGI("calendar", "Usando JSON cacheado");
-          } else {
-            if (id(connection_error).empty()) {
-              id(connection_error) = "Sin datos";
-            }
-            ESP_LOGW("calendar", "JSON vacío");
-            id(cal_changed) = false;
-            return;
-          }
-
-          ESP_LOGI("calendar", "procesar_calendario: sensor_len=%d cache_len=%d last_hash=%s cache_ts=%d",
-                   (int)json_sensor.size(), (int)id(calendario_json).size(), id(last_calendar_hash).c_str(), id(calendario_cache_ts));
-
-
-
-          // Get current time (used for TTL and timestamps)
-          auto now = id(esptime).now();
-          if (!now.is_valid()) {
-            ESP_LOGW("calendar", "Hora no válida");
-            id(cal_changed) = false;
-            return;
-          }
-
-          tm now_tm = {};
-          now_tm.tm_year = now.year - 1900;
-          now_tm.tm_mon  = now.month - 1;
-          now_tm.tm_mday = now.day_of_month;
-          now_tm.tm_hour = now.hour;
-          now_tm.tm_min  = now.minute;
-          now_tm.tm_sec  = now.second;
-          time_t now_ts = mktime(&now_tm);
-
-          // If we used sensor JSON, store cache timestamp
-          if (!json_sensor.empty()) {
-            id(calendario_cache_ts) = (int)now_ts;
-          } else if (id(calendario_cache_ts) != 0) {
-            // Check TTL (12 hours)
-            const int CACHE_TTL = 12 * 3600;
-            if ((now_ts - (time_t)id(calendario_cache_ts)) > CACHE_TTL) {
-              ESP_LOGW("calendar", "Cached JSON stale (%ld s), will request refresh", (long)(now_ts - (time_t)id(calendario_cache_ts)));
-              id(force_refresh) = true;
-            }
-          }
-
-          // Compute FNV-1a 64-bit hash of the JSON and store for cache
-          uint64_t hash = 14695981039346656037ULL;
-          for (char c : json_str) {
-            hash ^= (uint8_t)c;
-            hash *= 1099511628211ULL;
-          }
-          char hash_buf[17];
-          snprintf(hash_buf, sizeof(hash_buf), "%016llx", (unsigned long long)hash);
-          std::string hash_str(hash_buf);
-          id(last_calendar_hash) = hash_str; 
-
-          #pragma GCC diagnostic push
-          #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-          StaticJsonDocument<16384> doc;
-          #pragma GCC diagnostic pop
-          DeserializationError err = deserializeJson(doc, json_str);
-          if (err) {
-            ESP_LOGE("calendar", "Error JSON: %s", err.c_str());
-            return;
-          }
-
-          JsonArray arr = doc.as<JsonArray>();
-          if (!now.is_valid()) {
-            ESP_LOGW("calendar", "Hora no válida");
-            return;
-          }
-
-          const char* dias[]   = {"dom.", "lun.", "mar.", "mié.", "jue.", "vie.", "sáb."};
-          const char* meses[]  = {"ene", "feb", "mar", "abr", "may", "jun",
-                                  "jul", "ago", "sep", "oct", "nov", "dic"};
-
-          int shown = 0;
-
-          for (JsonObject ev : arr) {
-            if (shown >= 8) break;
-
-            std::string start = ev["start"] | "";
-            std::string end   = ev["end"]   | "";
-            std::string title = ev["summary"] | "";
-            std::string loc   = ev["location"] | "";
-
-            if (start.size() < 10) continue;
-
-            int y = stoi(start.substr(0,4));
-            int m = stoi    (start.substr(5,2));
-            int d = stoi(start.substr(8,2));
-            int hh = (start.size() >= 16) ? stoi(start.substr(11,2)) : 0;
-            int mm = (start.size() >= 16) ? stoi(start.substr(14,2)) : 0;
-
-            tm timeinfo = {};
-            timeinfo.tm_year = y - 1900;
-            timeinfo.tm_mon  = m - 1;
-            timeinfo.tm_mday = d;
-            timeinfo.tm_hour = hh;
-            timeinfo.tm_min  = mm;
-            timeinfo.tm_sec  = 0;
-            timeinfo.tm_isdst = -1;  // Let mktime determine DST
-
-            // CRITICAL: Call mktime to compute tm_wday (day of week)!
-            mktime(&timeinfo);
-
-            // Normalize to midday to avoid DST edge issues
-            tm now_tm = {};
-            now_tm.tm_year = now.year - 1900;
-            now_tm.tm_mon  = now.month - 1;
-            now_tm.tm_mday = now.day_of_month;
-            now_tm.tm_hour = 12;
-            now_tm.tm_min  = 0;
-            now_tm.tm_sec  = 0;
-
-            time_t today_ts = mktime(&now_tm);
-
-            tm ev_tm = timeinfo;
-            ev_tm.tm_hour = 12;
-            ev_tm.tm_min  = 0;
-            ev_tm.tm_sec  = 0;
-
-            time_t event_ts = mktime(&ev_tm);
-
-            // ===== DIFERENCIA REAL EN DÍAS =====
-            int days = (event_ts - today_ts) / 86400;
-
-            char when_buf[20];
-            if (days < 0) {
-              // Ignorar eventos pasados
-              continue;
-            } else if (days == 0) {
-              snprintf(when_buf, sizeof(when_buf), "(hoy)");
-            } else if (days == 1) {
-              snprintf(when_buf, sizeof(when_buf), "(mañana)");
-            } else if (days < 30) {
-              snprintf(when_buf, sizeof(when_buf), "(en %d días)", days);
-            } else {
-              snprintf(when_buf, sizeof(when_buf), "(+1 mes)");
-            }
-
-            char day_buf[20];
-            snprintf(day_buf, sizeof(day_buf), "%s %d %s",
-                    dias[timeinfo.tm_wday],
-                    timeinfo.tm_mday,
-                    meses[timeinfo.tm_mon]);
-
-            char time_buf[20];
-            if (start.size() >= 16 && end.size() >= 16) {
-              snprintf(time_buf, sizeof(time_buf), "%s-%s",
-                      start.substr(11,5).c_str(),
-                      end.substr(11,5).c_str());
-            } else {
-              snprintf(time_buf, sizeof(time_buf), "Todo el día");
-            }
-
-            std::string day_str(day_buf);
-            trim(day_str);
-            normalize(day_str);
-            id(cal_day).push_back(day_str);
-
-            trim(title);
-            normalize(title);
-            id(cal_title).push_back(title);
-
-            std::string time_str(time_buf);
-            trim(time_str);
-            normalize(time_str);
-            id(cal_time).push_back(time_str);
-
-            trim(loc);
-            normalize(loc);
-            truncate(loc, 50);
-            id(cal_location).push_back(loc);
-
-            std::string when_str(when_buf);
-            trim(when_str);
-            normalize(when_str);
-            id(cal_when).push_back(when_str);
-
-            ESP_LOGD("calendar", "Evento añadido: %s", title.c_str());
-            ESP_LOGD("calendar", "Location añadido: %s", loc.c_str());
-            shown++;
-          }
-
-          // Update last refresh timestamp
-          char ts_buf[32];
-          snprintf(ts_buf, sizeof(ts_buf), "%04d-%02d-%02d %02d:%02d:%02d",
-                   now.year, now.month, now.day_of_month,
-                   now.hour, now.minute, now.second);
-          id(last_refresh) = std::string(ts_buf);
-
-          ESP_LOGI("calendar", "Eventos procesados: %d", shown);
-
-          // Compute hash of processed data to detect changes including "when" fields
-          std::string processed_data;
-          for (size_t i = 0; i < id(cal_title).size(); ++i) {
-            processed_data += id(cal_title)[i] + "|" + id(cal_location)[i] + "|" + id(cal_time)[i] + "|" + id(cal_when)[i] + "|" + id(cal_day)[i] + "\n";
-          }
-          uint64_t proc_hash = 14695981039346656037ULL;
-          for (char c : processed_data) {
-            proc_hash ^= (uint8_t)c;
-            proc_hash *= 1099511628211ULL;
-          }
-          char proc_hash_buf[17];
-          snprintf(proc_hash_buf, sizeof(proc_hash_buf), "%016llx", (unsigned long long)proc_hash);
-          std::string proc_hash_str(proc_hash_buf);
-
-          if (proc_hash_str != id(last_processed_hash) || id(force_refresh)) {
-            id(cal_changed) = true;
-            id(last_processed_hash) = proc_hash_str;
-            ESP_LOGI("calendar", "Processed data changed (hash %s), will paint", proc_hash_str.c_str());
-          } else {
-            id(cal_changed) = false;
-            ESP_LOGI("calendar", "No changes in processed data (hash %s), skipping paint", proc_hash_str.c_str());
-          }
+      - lambda: |- 
+          procesar_calendario_impl();
