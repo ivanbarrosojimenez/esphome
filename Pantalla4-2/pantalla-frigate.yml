@@ -8,10 +8,7 @@
       - output.turn_off: led_builtin
       - script.execute: ensure_painted_on_boot
       - script.execute: refresh_loop
-external_components:
-  - source: github://pr#6209
-    components: [ waveshare_epaper ]
-    refresh: 5min
+# external_components removed to prefer local custom_components/waveshare_epaper
 
 
 esp32:
@@ -64,6 +61,11 @@ globals:
     initial_value: ''
 
   - id: last_calendar_hash
+    type: std::string
+    restore_value: yes
+    initial_value: ''
+
+  - id: last_processed_hash
     type: std::string
     restore_value: yes
     initial_value: ''
@@ -581,6 +583,27 @@ script:
     then:
       - lambda: |-
 
+          // Función auxiliar para trim (elimina espacios al inicio y final)
+          auto trim = [](std::string &s) {
+            s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+            s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), s.end());
+          };
+          // Función para normalizar texto (solo permite caracteres definidos en las fuentes)
+          const std::string allowed_chars = "!\"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ";
+          auto normalize = [allowed_chars](std::string &s) {
+            for (char &c : s) {
+              if (allowed_chars.find(c) == std::string::npos) {
+                c = ' ';
+              }
+            }
+          };
+          // Función para truncar texto a longitud máxima
+          auto truncate = [](std::string &s, size_t max_len) {
+            if (s.size() > max_len) {
+              s = s.substr(0, max_len);
+            }
+          };
+
           id(cal_day).clear();
           id(cal_title).clear();
           id(cal_time).clear();
@@ -657,7 +680,7 @@ script:
             }
           }
 
-          // Compute FNV-1a 64-bit hash of the JSON and compare to last stored hash
+          // Compute FNV-1a 64-bit hash of the JSON and store for cache
           uint64_t hash = 14695981039346656037ULL;
           for (char c : json_str) {
             hash ^= (uint8_t)c;
@@ -666,14 +689,7 @@ script:
           char hash_buf[17];
           snprintf(hash_buf, sizeof(hash_buf), "%016llx", (unsigned long long)hash);
           std::string hash_str(hash_buf);
-
-          if (hash_str == id(last_calendar_hash) && !id(force_refresh)) {
-            ESP_LOGI("calendar", "No changes in calendar (hash %s), skipping paint", hash_str.c_str());
-            id(cal_changed) = false;
-            return;
-          }
-          id(last_calendar_hash) = hash_str;
-          id(cal_changed) = true; 
+          id(last_calendar_hash) = hash_str; 
 
           #pragma GCC diagnostic push
           #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -775,14 +791,32 @@ script:
               snprintf(time_buf, sizeof(time_buf), "Todo el día");
             }
 
-            id(cal_day).push_back(day_buf);
+            std::string day_str(day_buf);
+            trim(day_str);
+            normalize(day_str);
+            id(cal_day).push_back(day_str);
+
+            trim(title);
+            normalize(title);
             id(cal_title).push_back(title);
 
-            id(cal_time).push_back(time_buf);
+            std::string time_str(time_buf);
+            trim(time_str);
+            normalize(time_str);
+            id(cal_time).push_back(time_str);
+
+            trim(loc);
+            normalize(loc);
+            truncate(loc, 50);
             id(cal_location).push_back(loc);
-            id(cal_when).push_back(when_buf);
+
+            std::string when_str(when_buf);
+            trim(when_str);
+            normalize(when_str);
+            id(cal_when).push_back(when_str);
 
             ESP_LOGD("calendar", "Evento añadido: %s", title.c_str());
+            ESP_LOGD("calendar", "Location añadido: %s", loc.c_str());
             shown++;
           }
 
@@ -794,3 +828,26 @@ script:
           id(last_refresh) = std::string(ts_buf);
 
           ESP_LOGI("calendar", "Eventos procesados: %d", shown);
+
+          // Compute hash of processed data to detect changes including "when" fields
+          std::string processed_data;
+          for (size_t i = 0; i < id(cal_title).size(); ++i) {
+            processed_data += id(cal_title)[i] + "|" + id(cal_location)[i] + "|" + id(cal_time)[i] + "|" + id(cal_when)[i] + "|" + id(cal_day)[i] + "\n";
+          }
+          uint64_t proc_hash = 14695981039346656037ULL;
+          for (char c : processed_data) {
+            proc_hash ^= (uint8_t)c;
+            proc_hash *= 1099511628211ULL;
+          }
+          char proc_hash_buf[17];
+          snprintf(proc_hash_buf, sizeof(proc_hash_buf), "%016llx", (unsigned long long)proc_hash);
+          std::string proc_hash_str(proc_hash_buf);
+
+          if (proc_hash_str != id(last_processed_hash) || id(force_refresh)) {
+            id(cal_changed) = true;
+            id(last_processed_hash) = proc_hash_str;
+            ESP_LOGI("calendar", "Processed data changed (hash %s), will paint", proc_hash_str.c_str());
+          } else {
+            id(cal_changed) = false;
+            ESP_LOGI("calendar", "No changes in processed data (hash %s), skipping paint", proc_hash_str.c_str());
+          }
