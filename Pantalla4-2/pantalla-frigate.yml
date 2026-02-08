@@ -102,6 +102,11 @@ globals:
     restore_value: no
     initial_value: ''
 
+  - id: sim_shrink_pixels
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
   - id: eventos_texto
     type: std::vector<std::string>
     restore_value: no
@@ -138,51 +143,94 @@ color:
     blue_int: 84
 
 font:
-  # Fuentes para título (tamaños variables)
+  # Fuentes (unificadas): Palatino regular y Atkinson bold en tamaños 12..20
+  # Palatino regular
+  - file: "../fonts/Palatino.ttf"
+    id: fuente_titulo_12
+    size: 12
+    glyphs: &glyphs >-
+      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+  - file: "../fonts/Palatino.ttf"
+    id: fuente_titulo_13
+    size: 13
+    glyphs: *glyphs
+  - file: "../fonts/Palatino.ttf"
+    id: fuente_titulo_14
+    size: 14
+    glyphs: *glyphs
+  - file: "../fonts/Palatino.ttf"
+    id: fuente_titulo_15
+    size: 15
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
     id: fuente_titulo_16
     size: 16
-    glyphs: &glyphs >-
-      !"#$%&'()*+,-./:;=?@°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ
+    glyphs: *glyphs
+  - file: "../fonts/Palatino.ttf"
+    id: fuente_titulo_17
+    size: 17
+    glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
     id: fuente_titulo_18
     size: 18
     glyphs: *glyphs
   - file: "../fonts/Palatino.ttf"
+    id: fuente_titulo_19
+    size: 19
+    glyphs: *glyphs
+  - file: "../fonts/Palatino.ttf"
     id: fuente_titulo_20
     size: 20
     glyphs: *glyphs
-  - file: "../fonts/Palatino.ttf"
-    id: fuente_titulo_22
-    size: 22
+
+  # Atkinson (bold) - same sizes
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_12
+    size: 12
     glyphs: *glyphs
-  - file: "../fonts/Palatino.ttf"
-    id: fuente_titulo_24
-    size: 24
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_13
+    size: 13
+    glyphs: *glyphs
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_14
+    size: 14
+    glyphs: *glyphs
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_15
+    size: 15
+    glyphs: *glyphs
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_16
+    size: 16
+    glyphs: *glyphs
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_17
+    size: 17
+    glyphs: *glyphs
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_18
+    size: 18
+    glyphs: *glyphs
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_19
+    size: 19
+    glyphs: *glyphs
+  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
+    id: fuente_titulo_bold_20
+    size: 20
     glyphs: *glyphs
 
   # Fuentes para fecha (tamaños variables)
+  # Nota: Las fuentes de fecha se unifican con las de título cuando existe la misma talla.
+  # Solo se mantiene la versión pequeña (12) específica para fechas; para 14/16/17/18/20
+  # el mapeo usará las `fuente_titulo_*` correspondientes.
   - file: "../fonts/Palatino.ttf"
     id: fuente_fecha_12
     size: 12
     glyphs: *glyphs
-  - file: "../fonts/Palatino.ttf"
-    id: fuente_fecha_16
-    size: 16
-    glyphs: *glyphs
-  - file: "../fonts/Palatino.ttf"
-    id: fuente_fecha_18
-    size: 18
-    glyphs: *glyphs
-  - file: "../fonts/Palatino.ttf"
-    id: fuente_fecha_20
-    size: 20
-    glyphs: *glyphs
 
-  - file: "../fonts/AtkinsonHyperlegibleNext-Bold.otf"
-    id: fuente_8
-    size: 12
-    glyphs: *glyphs
+
 
 
 text_sensor:
@@ -315,12 +363,23 @@ select:
     id: ui_font_size
     options:
       - "12"
+      - "13"
       - "14"
+      - "15"
       - "16"
+      - "17"
       - "18"
+      - "19"
       - "20"
-      - "22"
-      - "24"
+      - "12 bold"
+      - "13 bold"
+      - "14 bold"
+      - "15 bold"
+      - "16 bold"
+      - "17 bold"
+      - "18 bold"
+      - "19 bold"
+      - "20 bold"
     initial_option: "16"
     optimistic: true
     restore_value: true
@@ -328,6 +387,115 @@ select:
       then:
         - lambda: |-
             ESP_LOGD("diag", "ui_font_size on_value: %s", x.c_str());
+
+  - platform: template
+    name: "UI tamaño fuente (fecha)"
+    id: ui_date_font_size
+    options:
+      - "12"
+      - "13"
+      - "14"
+      - "15"
+      - "16"
+      - "17"
+      - "18"
+      - "19"
+      - "20"
+      - "12 bold"
+      - "13 bold"
+      - "14 bold"
+      - "15 bold"
+      - "16 bold"
+      - "17 bold"
+      - "18 bold"
+      - "19 bold"
+      - "20 bold"
+    initial_option: "16"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "ui_date_font_size on_value: %s", x.c_str());
+
+  - platform: template
+    name: "UI tamaño fuente (hora)"
+    id: ui_time_font_size
+    options:
+      - "12"
+      - "13"
+      - "14"
+      - "15"
+      - "16"
+      - "17"
+      - "18"
+      - "19"
+      - "20"
+      - "12 bold"
+      - "13 bold"
+      - "14 bold"
+      - "15 bold"
+      - "16 bold"
+      - "17 bold"
+      - "18 bold"
+      - "19 bold"
+      - "20 bold"
+    initial_option: "16"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "ui_time_font_size on_value: %s", x.c_str());
+
+  - platform: template
+    name: "UI tamaño fuente (ubicación)"
+    id: ui_location_font_size
+    options:
+      - "12"
+      - "13"
+      - "14"
+      - "15"
+      - "16"
+      - "17"
+      - "18"
+      - "19"
+      - "20"
+      - "12 bold"
+      - "13 bold"
+      - "14 bold"
+      - "15 bold"
+      - "16 bold"
+      - "17 bold"
+      - "18 bold"
+      - "19 bold"
+      - "20 bold"
+    initial_option: "12"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("diag", "ui_location_font_size on_value: %s", x.c_str());
+
+  - platform: template
+    name: "Pantalla número activa"
+    id: ui_device_number
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+    initial_option: "1"
+    optimistic: true
+    restore_value: true
+    icon: "mdi:numeric-1-box"
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGI("diag", "ui_device_number on_value: %s", x.c_str());
+            int v = atoi(x.c_str());
+            set_device_number(v);
 
 #Sensor HA
 binary_sensor:
@@ -423,6 +591,24 @@ number:
         - lambda: |-
             ESP_LOGD("diag", "ui_density_factor on_value: %f", x);
 
+
+
+  - platform: template
+    name: "Pantalla shrink simulación (px)"
+    id: ui_sim_shrink_px
+    min_value: 0
+    max_value: 50
+    initial_value: 0
+    step: 1
+    unit_of_measurement: "px"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            id(sim_shrink_pixels) = (int)x;
+            ESP_LOGD("diag", "ui_sim_shrink_px on_value: %f (sim_shrink_pixels set to %d)", x, id(sim_shrink_pixels));
+
 output:
   - platform: gpio
     id: power_sensors
@@ -467,7 +653,12 @@ script:
           condition:
             api.connected:
       - delay: 3s
-      
+
+      # Sincronizar globals con selects (asegura valores iniciales desde HA)
+      - lambda: |-
+          id(sim_shrink_pixels) = (int) id(ui_sim_shrink_px).state;
+          ESP_LOGI("diag", "Boot sync: sim_shrink_pixels=%d", id(sim_shrink_pixels));
+
       # Esperar que el sensor tenga datos o que exista caché válida
       - wait_until:
           timeout: 30s
@@ -479,8 +670,7 @@ script:
       # Siempre forzar refresh en boot para garantizar pintado
       - globals.set:
           id: force_refresh
-          value: 'true'
-      
+          value: 'true'      
       # Procesar calendario y actualizar pantalla
       - script.execute: procesar_calendario
       - delay: 2500ms
