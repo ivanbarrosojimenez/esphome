@@ -2,7 +2,7 @@
   name: pantalla-calendario-4-2-1
   friendly_name: pantalla-calendario-4-2-1
 
-  includes: ["src/pantalla_helpers.h", "src/pantalla_config.h", "src/pantalla_fonts.h", "src/pantalla_draw.h", "src/pantalla_calendar_parser.h"]
+  includes: ["sources/pantalla_helpers.h", "sources/pantalla_config.h", "sources/pantalla_fonts.h", "sources/pantalla_draw.h", "sources/pantalla_calendar_parser.h"]
   on_boot:
     priority: -10
     then:
