@@ -267,7 +267,7 @@ display:
     full_update_every: 300
     reset_duration: 200ms  # Aumentado para mejorar timing del reset (habitualmente 200–500ms en algunas unidades)
     auto_clear_enabled: false
-    # Drawing logic extracted to src/pantalla_helpers.h — use draw_calendar(it)
+    # Drawing logic extracted to sources/pantalla_helpers.h — use draw_calendar(it)
     id: main_display
     lambda: |-
       draw_calendar(it);

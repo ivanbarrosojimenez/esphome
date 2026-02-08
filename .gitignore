@@ -18,3 +18,4 @@ secrets.yaml
 # Archivos temporales
 *.log
 *.tmp
+*/.venv/

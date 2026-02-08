@@ -79,25 +79,33 @@ inline void draw_date_header(esphome::display::Display &it, int x, int y, const 
 }
 
 // Calculate event height without drawing (mirrors draw_event's returned height)
-inline int calc_event_height(size_t i, int title_font_size) {
+inline int calc_event_height(const CalendarEvent &ev, bool next_same_day, int title_font_size) {
   std::string t1, t2;
-  split_two_lines(id(cal_title)[i], t1, t2, MAX_TITLE_CHARS);
+  split_two_lines(ev.title, t1, t2, MAX_TITLE_CHARS);
   int title_height_single = title_font_size + 2;
   int title_height = t2.empty() ? title_height_single : (title_height_single * 2);
-  int spacing = id(cal_location)[i].empty() ? SPACING_WITHOUT_LOCATION : SPACING_WITH_LOCATION;
+  int spacing = ev.location.empty() ? SPACING_WITHOUT_LOCATION : SPACING_WITH_LOCATION;
   // Reduce spacing by 4 px when the next event is on the same day (same logic as draw_event)
-  if (i + 1 < id(cal_day).size() && id(cal_day)[i] == id(cal_day)[i + 1]) {
+  if (next_same_day) {
     spacing = spacing - 4;
     if (spacing < 0) spacing = 0;
   }
   return title_height + spacing;
 }
 
+// Backwards-compatible index-based wrapper
+inline int calc_event_height(size_t i, int title_font_size) {
+  auto &events = cal_events_ref();
+  if (i >= events.size()) return 0;
+  bool next_same = (i + 1 < events.size() && events[i].day == events[i + 1].day);
+  return calc_event_height(events[i], next_same, title_font_size);
+}
+
 // Draw a single event. Returns the total vertical space used (title height + spacing)
-inline int draw_event(esphome::display::Display &it, int y, size_t i, esphome::display::BaseFont* title_font, int title_font_size) {
+inline int draw_event(esphome::display::Display &it, int y, const CalendarEvent &ev, bool next_same_day, esphome::display::BaseFont* title_font, int title_font_size, int index_in_list) {
   // Split title into up to two lines
   std::string t1, t2;
-  split_two_lines(id(cal_title)[i], t1, t2, MAX_TITLE_CHARS);
+  split_two_lines(ev.title, t1, t2, MAX_TITLE_CHARS);
 
   it.print(TITLE_COL_X, y, title_font, id(color_negro), t1.c_str());
 
@@ -113,32 +121,40 @@ inline int draw_event(esphome::display::Display &it, int y, size_t i, esphome::d
   // Time and "when" use dedicated selector
   auto* time_font = get_time_font();
   int time_font_size = get_time_font_size();
-  it.print(TITLE_COL_X, y_line, time_font, id(color_negro), id(cal_time)[i].c_str());
+  it.print(TITLE_COL_X, y_line, time_font, id(color_negro), ev.time.c_str());
 
   // Cuándo + índice del evento (índice mostrado a la derecha, empezando en 1)
   const int INDEX_OFFSET_PX = 20; // espacio reservado para el número (dos dígitos)
-  std::string when_str = id(cal_when)[i];
+  std::string when_str = ev.when;
   it.print(RIGHT_MARGIN_X - INDEX_OFFSET_PX, y_line, time_font, id(color_negro), TextAlign::TOP_RIGHT, when_str.c_str());
   // Índice en gris oscuro a la derecha
-  std::string idx = std::to_string((int)i + 1);
+  std::string idx = std::to_string(index_in_list);
   it.print(RIGHT_MARGIN_X, y_line, time_font, id(color_dark_gray), TextAlign::TOP_RIGHT, idx.c_str());
 
   // Localización
-  if (!id(cal_location)[i].empty()) {
+  if (!ev.location.empty()) {
     int icon_x = TITLE_COL_X - 14;
     int icon_top = y + title_height + 10;
     draw_location_icon(it, icon_x, icon_top, id(color_negro));
     auto* loc_font = get_location_font();
     int loc_font_size = get_location_font_size();
-    it.print(icon_x + 14, y + title_height + 14, loc_font, id(color_dark_gray), id(cal_location)[i].c_str());
+    it.print(icon_x + 14, y + title_height + 14, loc_font, id(color_dark_gray), ev.location.c_str());
   }
 
-  int spacing = id(cal_location)[i].empty() ? SPACING_WITHOUT_LOCATION : SPACING_WITH_LOCATION;
+  int spacing = ev.location.empty() ? SPACING_WITHOUT_LOCATION : SPACING_WITH_LOCATION;
   // Reduce spacing by 4 px when the following event is on the same day
-  if (i + 1 < id(cal_day).size() && id(cal_day)[i] == id(cal_day)[i + 1]) {
+  if (next_same_day) {
     spacing = spacing - 4;
     if (spacing < 0) spacing = 0;
   }
 
   return title_height + spacing;
+}
+
+// Backwards-compatible index-based wrapper for draw_event
+inline int draw_event(esphome::display::Display &it, int y, size_t i, esphome::display::BaseFont* title_font, int title_font_size) {
+  auto &events = cal_events_ref();
+  if (i >= events.size()) return 0;
+  bool next_same = (i + 1 < events.size() && events[i].day == events[i + 1].day);
+  return draw_event(it, y, events[i], next_same, title_font, title_font_size, (int)i + 1);
 }

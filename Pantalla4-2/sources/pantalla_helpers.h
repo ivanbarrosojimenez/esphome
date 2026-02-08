@@ -107,10 +107,10 @@ inline void draw_calendar(esphome::display::Display &it) {
       int required = (int)ceilf(event_h * DEVICE1_VISIBILITY_THRESHOLD);
       int missing = event_h - visible;
 
-      ESP_LOGI("pagination", "DRAW1 check i=%d y=%d event_h=%d visible=%d required=%d missing=%d", i, y, event_h, visible, required, missing);
+      ESP_LOGD("pagination", "DRAW1 check i=%d y=%d event_h=%d visible=%d required=%d missing=%d", i, y, event_h, visible, required, missing);
 
       if (y + required > SCREEN_H) {
-        ESP_LOGI("pagination", "DRAW1 skip i=%d (not enough visible for device 1)", i);
+        ESP_LOGD("pagination", "DRAW1 skip i=%d (not enough visible for device 1)", i);
         break; // further events will be even less visible
       }
 
@@ -128,11 +128,11 @@ inline void draw_calendar(esphome::display::Display &it) {
       // Draw event and get vertical advance
       int used = draw_event(it, y, i, title_font, title_font_size);
       y += used + density;
-      ESP_LOGI("pagination", "DRAW1 painted i=%d -> y_next=%d used=%d density=%d", i, y, used, density);
+      ESP_LOGD("pagination", "DRAW1 painted i=%d -> y_next=%d used=%d density=%d", i, y, used, density);
     }
   } else {
     // For device > 1, compute start index by simulating previous devices
-    ESP_LOGI("pagination", "draw_calendar called for device=%d sim_shrink=%d", device_num, (int)id(sim_shrink_pixels));
+    ESP_LOGD("pagination", "draw_calendar called for device=%d sim_shrink=%d", device_num, (int)id(sim_shrink_pixels));
 
     // Compute start index by calling the canonical simulator
     int start_idx = calc_start_index(device_num, title_font_size, date_font_size, density);
@@ -152,7 +152,7 @@ inline void draw_calendar(esphome::display::Display &it) {
         draw_date_header(it, DATE_COL_X, y, day_num, month, date_font, date_font_size, true);
         last_day = id(cal_day)[start_idx];
       } else {
-        ESP_LOGI("pagination", "SKIP context header at start_idx=%d because first event is not visible enough", start_idx);
+        ESP_LOGD("pagination", "SKIP context header at start_idx=%d because first event is not visible enough", start_idx);
       }
     }
 
@@ -166,11 +166,11 @@ inline void draw_calendar(esphome::display::Display &it) {
       int required = (int)ceilf(event_h * VISIBILITY_THRESHOLD);
       int missing = event_h - visible;
 
-      ESP_LOGI("pagination", "DRAW check i=%d y=%d event_h=%d visible=%d required=%d missing=%d", i, y, event_h, visible, required, missing);
+      ESP_LOGD("pagination", "DRAW check i=%d y=%d event_h=%d visible=%d required=%d missing=%d", i, y, event_h, visible, required, missing);
 
       if (y + (int)(event_h * VISIBILITY_THRESHOLD) > SCREEN_H) {
         // We'll skip drawing this event because it's not sufficiently visible
-        ESP_LOGI("pagination", "DRAW skip i=%d (not enough visible)", i);
+        ESP_LOGD("pagination", "DRAW skip i=%d (not enough visible)", i);
         break;
       }
 

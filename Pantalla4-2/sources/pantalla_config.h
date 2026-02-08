@@ -34,3 +34,14 @@ static const std::string ALLOWED_CHARS =
   "!\"#$%&'()*+,-./:;=?@°0123456789"
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "
   "áéíóúÁÉÍÓÚñÑüÜ¿¡ÀÈÌÒÙàèìòùâêîôûÂÊÎÔÛäëïöÄËÏÖ";
+
+// Structured event type shared across modules
+struct CalendarEvent {
+  std::string day;
+  std::string title;
+  std::string time;
+  std::string location;
+  std::string when;
+};
+
+inline std::vector<CalendarEvent>& cal_events_ref(); // defined in parser implementation

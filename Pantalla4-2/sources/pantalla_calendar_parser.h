@@ -2,6 +2,12 @@
 #include "esphome.h"
 #include "pantalla_config.h"
 
+// Definition of cal_events_ref (structured vector storage)
+inline std::vector<CalendarEvent>& cal_events_ref() {
+  static std::vector<CalendarEvent> v;
+  return v;
+}
+
 // Trim spaces
 inline void trim(std::string &s) {
   s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
@@ -61,13 +67,113 @@ inline bool parse_iso_datetime(const std::string &iso, int &y, int &m, int &d, i
   return false;
 }
 
-// Main processing function ported from YAML lambda
+// Original inline processing logic replaced by a cleaner, testable implementation using parse_events_from_json().
+// See the simplified `procesar_calendario_impl()` below which is smaller and delegates parsing to the helper.
+
+
+// Parse JSON events into a structured vector of CalendarEvent
+inline int parse_events_from_json(const std::string &json_str, std::vector<CalendarEvent> &out, time_t now_ts) {
+  out.clear();
+  if (json_str.empty()) return 0;
+
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  StaticJsonDocument<16384> doc;
+  #pragma GCC diagnostic pop
+  DeserializationError err = deserializeJson(doc, json_str);
+  if (err) {
+    ESP_LOGE("calendar", "Error JSON: %s", err.c_str());
+    return 0;
+  }
+
+  JsonArray arr = doc.as<JsonArray>();
+  int shown = 0;
+
+  for (JsonObject ev : arr) {
+    if (shown >= MAX_EVENTS) break;
+
+    std::string start = ev["start"] | "";
+    std::string end   = ev["end"]   | "";
+    std::string title = ev["summary"] | "";
+    std::string loc   = ev["location"] | "";
+
+    int y,m,d,hh,mm;
+    if (!parse_iso_datetime(start, y, m, d, hh, mm)) continue;
+
+    tm timeinfo = {};
+    timeinfo.tm_year = y - 1900;
+    timeinfo.tm_mon  = m - 1;
+    timeinfo.tm_mday = d;
+    timeinfo.tm_hour = hh;
+    timeinfo.tm_min  = mm;
+    timeinfo.tm_sec  = 0;
+    timeinfo.tm_isdst = -1;
+
+    mktime(&timeinfo); // compute tm_wday
+
+    // Normalize to midday to avoid DST edge issues
+    tm today_tm = {};
+    today_tm.tm_year = (int)localtime(&now_ts)->tm_year;
+    today_tm.tm_mon  = (int)localtime(&now_ts)->tm_mon;
+    today_tm.tm_mday = (int)localtime(&now_ts)->tm_mday;
+    today_tm.tm_hour = 12;
+    today_tm.tm_min  = 0;
+    today_tm.tm_sec  = 0;
+    time_t today_ts = mktime(&today_tm);
+
+    tm ev_tm = timeinfo;
+    ev_tm.tm_hour = 12; ev_tm.tm_min = 0; ev_tm.tm_sec = 0;
+    time_t event_ts = mktime(&ev_tm);
+
+    int days = (event_ts - today_ts) / 86400;
+
+    char when_buf[20];
+    if (days < 0) continue; // skip past events
+    else if (days == 0) snprintf(when_buf, sizeof(when_buf), "(hoy)");
+    else if (days == 1) snprintf(when_buf, sizeof(when_buf), "(mañana)");
+    else if (days < 30) snprintf(when_buf, sizeof(when_buf), "(en %d días)", days);
+    else snprintf(when_buf, sizeof(when_buf), "(+1 mes)");
+
+    char day_buf[40];
+    snprintf(day_buf, sizeof(day_buf), "%s %d %s",
+             DIAS[timeinfo.tm_wday], timeinfo.tm_mday, MESES[timeinfo.tm_mon]);
+
+    char time_buf[40];
+    if (start.size() >= 16 && end.size() >= 16) {
+      snprintf(time_buf, sizeof(time_buf), "%s-%s", start.substr(11,5).c_str(), end.substr(11,5).c_str());
+    } else {
+      snprintf(time_buf, sizeof(time_buf), "Todo el día");
+    }
+
+    std::string day_str(day_buf); trim(day_str); normalize(day_str);
+
+    trim(title); normalize(title);
+
+    std::string time_str(time_buf); trim(time_str); normalize(time_str);
+
+    trim(loc); normalize(loc); truncate_str(loc, 50);
+
+    std::string when_str(when_buf); trim(when_str); normalize(when_str);
+
+    CalendarEvent ce{day_str, title, time_str, loc, when_str};
+    out.push_back(ce);
+
+    ESP_LOGD("calendar", "Evento añadido: %s", title.c_str());
+    ESP_LOGD("calendar", "Location añadido: %s", loc.c_str());
+    shown++;
+  }
+
+  return shown;
+}
+
+// Update: procesar_calendario_impl simplified to call the parse helper
 inline void procesar_calendario_impl() {
   id(cal_day).clear();
   id(cal_title).clear();
   id(cal_time).clear();
   id(cal_location).clear();
   id(cal_when).clear();
+  cal_events_ref().clear();
 
   id(connection_error) = "";
   id(using_cache) = false;
@@ -123,92 +229,16 @@ inline void procesar_calendario_impl() {
     }
   }
 
-  // JSON hash
-  id(last_calendar_hash) = fnv1a_hash_hex(json_str);
+  // Parse events using helper
+  int shown = parse_events_from_json(json_str, cal_events_ref(), now_ts);
 
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-  StaticJsonDocument<16384> doc;
-  #pragma GCC diagnostic pop
-  DeserializationError err = deserializeJson(doc, json_str);
-  if (err) {
-    ESP_LOGE("calendar", "Error JSON: %s", err.c_str());
-    return;
-  }
-
-  JsonArray arr = doc.as<JsonArray>();
-
-  int shown = 0;
-
-  for (JsonObject ev : arr) {
-    if (shown >= MAX_EVENTS) break;
-
-    std::string start = ev["start"] | "";
-    std::string end   = ev["end"]   | "";
-    std::string title = ev["summary"] | "";
-    std::string loc   = ev["location"] | "";
-
-    int y,m,d,hh,mm;
-    if (!parse_iso_datetime(start, y, m, d, hh, mm)) continue;
-
-    tm timeinfo = {};
-    timeinfo.tm_year = y - 1900;
-    timeinfo.tm_mon  = m - 1;
-    timeinfo.tm_mday = d;
-    timeinfo.tm_hour = hh;
-    timeinfo.tm_min  = mm;
-    timeinfo.tm_sec  = 0;
-    timeinfo.tm_isdst = -1;
-
-    mktime(&timeinfo); // compute tm_wday
-
-    // Normalize to midday to avoid DST edge issues
-    tm today_tm = {};
-    today_tm.tm_year = now.year - 1900;
-    today_tm.tm_mon  = now.month - 1;
-    today_tm.tm_mday = now.day_of_month;
-    today_tm.tm_hour = 12;
-    today_tm.tm_min  = 0;
-    today_tm.tm_sec  = 0;
-    time_t today_ts = mktime(&today_tm);
-
-    tm ev_tm = timeinfo;
-    ev_tm.tm_hour = 12; ev_tm.tm_min = 0; ev_tm.tm_sec = 0;
-    time_t event_ts = mktime(&ev_tm);
-
-    int days = (event_ts - today_ts) / 86400;
-
-    char when_buf[20];
-    if (days < 0) continue; // skip past events
-    else if (days == 0) snprintf(when_buf, sizeof(when_buf), "(hoy)");
-    else if (days == 1) snprintf(when_buf, sizeof(when_buf), "(mañana)");
-    else if (days < 30) snprintf(when_buf, sizeof(when_buf), "(en %d días)", days);
-    else snprintf(when_buf, sizeof(when_buf), "(+1 mes)");
-
-    char day_buf[40];
-    snprintf(day_buf, sizeof(day_buf), "%s %d %s",
-             DIAS[timeinfo.tm_wday], timeinfo.tm_mday, MESES[timeinfo.tm_mon]);
-
-    char time_buf[40];
-    if (start.size() >= 16 && end.size() >= 16) {
-      snprintf(time_buf, sizeof(time_buf), "%s-%s", start.substr(11,5).c_str(), end.substr(11,5).c_str());
-    } else {
-      snprintf(time_buf, sizeof(time_buf), "Todo el día");
-    }
-
-    std::string day_str(day_buf); trim(day_str); normalize(day_str); id(cal_day).push_back(day_str);
-
-    trim(title); normalize(title); id(cal_title).push_back(title);
-
-    std::string time_str(time_buf); trim(time_str); normalize(time_str); id(cal_time).push_back(time_str);
-
-    trim(loc); normalize(loc); truncate_str(loc, 50); id(cal_location).push_back(loc);
-
-    std::string when_str(when_buf); trim(when_str); normalize(when_str); id(cal_when).push_back(when_str);
-
-    ESP_LOGD("calendar", "Evento añadido: %s", title.c_str());
-    ESP_LOGD("calendar", "Location añadido: %s", loc.c_str());
-    shown++;
+  // Keep backwards-compatible parallel arrays in sync for existing draw code
+  for (auto &ev : cal_events_ref()) {
+    id(cal_day).push_back(ev.day);
+    id(cal_title).push_back(ev.title);
+    id(cal_time).push_back(ev.time);
+    id(cal_location).push_back(ev.location);
+    id(cal_when).push_back(ev.when);
   }
 
   // Update last refresh timestamp
@@ -219,10 +249,11 @@ inline void procesar_calendario_impl() {
 
   ESP_LOGI("calendar", "Eventos procesados: %d", shown);
 
-  // Compute processed data hash
+  // Compute processed data hash from structured events
   std::string processed_data;
-  for (size_t i = 0; i < id(cal_title).size(); ++i) {
-    processed_data += id(cal_title)[i] + "|" + id(cal_location)[i] + "|" + id(cal_time)[i] + "|" + id(cal_when)[i] + "|" + id(cal_day)[i] + "\n";
+  for (size_t i = 0; i < cal_events_ref().size(); ++i) {
+    auto &e = cal_events_ref()[i];
+    processed_data += e.title + "|" + e.location + "|" + e.time + "|" + e.when + "|" + e.day + "\n";
   }
   std::string proc_hash_str = fnv1a_hash_hex(processed_data);
 
