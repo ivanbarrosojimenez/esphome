@@ -1,15 +1,12 @@
 ﻿esphome:
-  name: pantalla-calendario-4-2-1
-  friendly_name: pantalla-calendario-4-2-1
+  name: pantalla-calendario-4-2-2
+  friendly_name: pantalla-calendario-4-2-2
 
-  includes: ["sources/pantalla_helpers.h", "sources/pantalla_config.h", "sources/pantalla_fonts.h", "sources/pantalla_draw.h", "sources/pantalla_calendar_parser.h"]
+  includes: ["sources/pantalla_helpers.h", "sources/pantalla_config.h", "sources/pantalla_fonts.h", "sources/pantalla_draw.h", "sources/pantalla_calendar_parser.h", "sources/pantalla_pagination.h"]
   on_boot:
     priority: -10
     then:
       - output.turn_off: led_builtin
-      - lambda: |-
-          ESP_LOGI("led", "Ensuring led_builtin is OFF at boot");
-          id(led_builtin).turn_off();
       - script.execute: ensure_painted_on_boot
       - script.execute: refresh_loop
 # external_components removed to prefer local custom_components/waveshare_epaper
@@ -17,6 +14,7 @@ substitutions: !include ../configs/configs.yaml
 
 esp32:
   board: esp32-s3-devkitc-1
+  variant: esp32s3
   framework:
     type: arduino
 web_server:
@@ -35,7 +33,7 @@ wifi:
   password: !secret wifi_password_madrid
   fast_connect: true
   manual_ip:
-    static_ip: ${pantalla_madrid_4_2_1}
+    static_ip: ${pantalla_madrid_4_2_2}
     gateway: ${net_gateway}
     subnet: ${net_mask}
     dns1: ${net_dns1}
@@ -619,15 +617,8 @@ output:
 
   - platform: gpio
     id: led_builtin
-    pin: GPIO48
+    pin: GPIO5
     inverted: false
-  # ...existing code...
-
-# Nuevo: refuerzo periódico para mantener LED apagado
-interval:
-  - interval: 5s
-    then:
-      - output.turn_off: led_builtin
 
 deep_sleep:
   id: deep_sleep_1

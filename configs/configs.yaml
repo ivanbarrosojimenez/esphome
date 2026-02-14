@@ -17,7 +17,7 @@ led_8x8_madrid_cocina_ip: "10.2.1.104"
 led_8x8_madrid_banio_ip: "10.2.1.105"
 
 pantalla_madrid_4_2_1: "10.2.1.150"
-
+pantalla_madrid_4_2_2: "10.2.1.151"
 # How to add more devices:
 # - Either add full IP entries like `device_x_ip: "10.2.1.102"`
 # - Or add host numbers: `device_x_host: "102"` and then use `"${ip_prefix}.${device_x_host}"` if your ESPHome version supports nested substitutions.
