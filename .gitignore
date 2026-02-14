@@ -19,3 +19,5 @@ secrets.yaml
 *.log
 *.tmp
 */.venv/
+*old*
+Pantalla4-2-2/.coverage
